@@ -16,9 +16,9 @@ func TestDetectOutIface(t *testing.T) {
 }
 
 func TestGetDefaultRoute(t *testing.T) {
-	gw, iface, err := getDefaultRoute()
+	gw, iface, err := GetDefaultRoute()
 	if err != nil {
-		t.Fatalf("getDefaultRoute: %v", err)
+		t.Fatalf("GetDefaultRoute: %v", err)
 	}
 	t.Logf("Route défaut: gw=%s iface=%s", gw, iface)
 }

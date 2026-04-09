@@ -17,9 +17,10 @@ type ServerConfig struct {
 }
 
 type ClientConfig struct {
-	TUNName    string
-	TUNAddr    string
-	ServerReal string
+	TUNName      string
+	ServerReal   string
+	DefaultGW    string
+	DefaultIface string
 }
 
 // SetupServer active l'IP forwarding et configure le NAT.
@@ -45,14 +46,8 @@ func SetupServer(cfg ServerConfig) (func(), error) {
 // SetupClient route tout le trafic via le TUN.
 // AddAddr est appelé dans node.New() — pas ici.
 func SetupClient(cfg ClientConfig) (func(), error) {
-	defaultGW, defaultIface, err := getDefaultRoute()
-	if err != nil {
-		return nil, fmt.Errorf("lecture route défaut: %w", err)
-	}
-	log.Printf("Route défaut sauvegardée: via %s dev %s", defaultGW, defaultIface)
-
-	if cfg.ServerReal != "" {
-		if err := addHostRoute(cfg.ServerReal, defaultGW, defaultIface); err != nil {
+	if cfg.ServerReal != "" && cfg.DefaultGW != "" {
+		if err := addHostRoute(cfg.ServerReal, cfg.DefaultGW, cfg.DefaultIface); err != nil {
 			log.Printf("Warning: route serveur réel: %v", err)
 		}
 	}
@@ -64,9 +59,9 @@ func SetupClient(cfg ClientConfig) (func(), error) {
 
 	cleanup := func() {
 		removeDefaultRoute(cfg.TUNName)
-		if defaultGW != "" {
-			restoreDefaultRoute(defaultGW, defaultIface)
-			log.Printf("Route défaut restaurée: via %s dev %s", defaultGW, defaultIface)
+		if cfg.DefaultGW != "" {
+			restoreDefaultRoute(cfg.DefaultGW, cfg.DefaultIface)
+			log.Printf("Route défaut restaurée: via %s dev %s", cfg.DefaultGW, cfg.DefaultIface)
 		}
 		if cfg.ServerReal != "" {
 			removeHostRoute(cfg.ServerReal)
@@ -119,7 +114,7 @@ func DetectOutIface() (string, error) {
 	return "", fmt.Errorf("aucune route par défaut")
 }
 
-func getDefaultRoute() (gw string, iface string, err error) {
+func GetDefaultRoute() (gw string, iface string, err error) {
 	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
 	if err != nil {
 		return "", "", err

@@ -35,7 +35,6 @@ func New(cfg *config.Config) (*Node, error) {
 	}
 	log.Printf("TUN prête: %s", tunIface.Name)
 
-	// Configure l'IP et monte l'interface immédiatement
 	if err := routing.AddAddr(tunIface.Name, cfg.TUN.Address); err != nil {
 		tunIface.Close()
 		return nil, fmt.Errorf("configuration TUN: %w", err)
@@ -71,25 +70,24 @@ func (n *Node) Close() {
 }
 
 func (n *Node) RunServer() error {
-	outIface, err := routing.DetectOutIface()
-	if err != nil {
-		return fmt.Errorf("détection interface sortante: %w", err)
+	if n.cfg.OutIface != "" {
+		cleanup, err := routing.SetupServer(routing.ServerConfig{
+			TUNName:  n.cfg.TUN.Name,
+			OutIface: n.cfg.OutIface,
+		})
+		if err != nil {
+			return fmt.Errorf("routing serveur: %w", err)
+		}
+		defer cleanup()
+		log.Printf("NAT activé via %s", n.cfg.OutIface)
+	} else {
+		log.Println("Mode sans NAT")
 	}
-	log.Printf("Interface sortante détectée: %s", outIface)
-
-	cleanup, err := routing.SetupServer(routing.ServerConfig{
-		TUNName:  n.cfg.TUN.Name,
-		TUNAddr:  n.cfg.TUN.Address,
-		OutIface: outIface,
-	})
-	if err != nil {
-		return fmt.Errorf("routing serveur: %w", err)
-	}
-	defer cleanup()
 
 	var (
 		sharedKey []byte
 		peerAddr  *net.UDPAddr
+		err       error
 	)
 	for {
 		log.Println("Attente du handshake client...")
@@ -115,15 +113,22 @@ func (n *Node) RunClient() error {
 		return fmt.Errorf("endpoint invalide: %w", err)
 	}
 
-	cleanup, err := routing.SetupClient(routing.ClientConfig{
-		TUNName:    n.cfg.TUN.Name,
-		TUNAddr:    n.cfg.TUN.Address,
-		ServerReal: serverAddr.IP.String(),
-	})
+	defaultGW, defaultIface, err := routing.GetDefaultRoute()
 	if err != nil {
-		return fmt.Errorf("routing client: %w", err)
+		log.Println("Pas de route par défaut — mode test, routing ignoré")
+	} else {
+		cleanup, err := routing.SetupClient(routing.ClientConfig{
+			TUNName:      n.cfg.TUN.Name,
+			ServerReal:   serverAddr.IP.String(),
+			DefaultGW:    defaultGW,
+			DefaultIface: defaultIface,
+		})
+		if err != nil {
+			log.Printf("Warning routing client: %v — on continue sans", err)
+		} else {
+			defer cleanup()
+		}
 	}
-	defer cleanup()
 
 	log.Printf("Handshake vers %s (%s)...", peer.Name, peer.Endpoint)
 	sharedKey, err := handshake.ClientHandshake(n.conn, serverAddr, n.kp)

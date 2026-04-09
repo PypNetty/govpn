@@ -1,0 +1,11 @@
+# Copie ce fichier en server.yaml ou client.yaml
+# Lance: ./govpn keygen -o server.yaml
+private_key: GENERE_AVEC_govpn_keygen
+listen: 0.0.0.0:51820
+tun:
+  name: govpn0
+  address: 10.0.0.1/24
+peers:
+  - name: mon-peer
+    public_key: CLE_PUBLIQUE_DU_PEER
+    endpoint: IP_DU_PEER:51820

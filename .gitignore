@@ -1,0 +1,22 @@
+# Binaire compilé
+govpn
+
+# Configs avec clés privées — ne JAMAIS committer
+*.yaml
+*.yml
+!example.yaml
+
+# Go
+*.test
+*.out
+/vendor/
+
+# Editeur
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

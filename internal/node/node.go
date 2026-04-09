@@ -10,12 +10,11 @@ import (
 
 	"github.com/PypNetty/govpn/internal/config"
 	"github.com/PypNetty/govpn/internal/handshake"
+	"github.com/PypNetty/govpn/internal/routing"
 	"github.com/PypNetty/govpn/internal/tun"
 	"github.com/PypNetty/govpn/internal/tunnel"
 )
 
-// Node représente une instance GoVPN — server ou client.
-// Il possède toutes les ressources réseau et les libère à Close().
 type Node struct {
 	cfg      *config.Config
 	kp       *handshake.KeyPair
@@ -23,8 +22,6 @@ type Node struct {
 	conn     *net.UDPConn
 }
 
-// New crée un Node à partir d'une config validée.
-// Ouvre l'interface TUN et le socket UDP.
 func New(cfg *config.Config) (*Node, error) {
 	kp, err := keypairFromHex(cfg.PrivateKey)
 	if err != nil {
@@ -37,8 +34,6 @@ func New(cfg *config.Config) (*Node, error) {
 		return nil, fmt.Errorf("TUN: %w", err)
 	}
 	log.Printf("TUN prête: %s", tunIface.Name)
-	log.Printf(">>> sudo ip addr add %s dev %s && sudo ip link set %s up",
-		cfg.TUN.Address, tunIface.Name, tunIface.Name)
 
 	udpAddr, err := net.ResolveUDPAddr("udp4", cfg.Listen)
 	if err != nil {
@@ -60,7 +55,6 @@ func New(cfg *config.Config) (*Node, error) {
 	}, nil
 }
 
-// Close libère toutes les ressources du Node.
 func (n *Node) Close() {
 	if n.tunIface != nil {
 		n.tunIface.Close()
@@ -70,12 +64,26 @@ func (n *Node) Close() {
 	}
 }
 
-// RunServer attend un handshake client puis démarre le tunnel.
 func (n *Node) RunServer() error {
+	outIface, err := routing.DetectOutIface()
+	if err != nil {
+		return fmt.Errorf("détection interface sortante: %w", err)
+	}
+	log.Printf("Interface sortante détectée: %s", outIface)
+
+	cleanup, err := routing.SetupServer(routing.ServerConfig{
+		TUNName:  n.cfg.TUN.Name,
+		TUNAddr:  n.cfg.TUN.Address,
+		OutIface: outIface,
+	})
+	if err != nil {
+		return fmt.Errorf("routing serveur: %w", err)
+	}
+	defer cleanup()
+
 	var (
 		sharedKey []byte
 		peerAddr  *net.UDPAddr
-		err       error
 	)
 	for {
 		log.Println("Attente du handshake client...")
@@ -90,7 +98,6 @@ func (n *Node) RunServer() error {
 	return tunnel.Run(n.tunIface, n.conn, peerAddr, sharedKey)
 }
 
-// RunClient effectue le handshake vers le serveur puis démarre le tunnel.
 func (n *Node) RunClient() error {
 	if len(n.cfg.Peers) == 0 {
 		return fmt.Errorf("aucun peer dans la config")
@@ -102,6 +109,16 @@ func (n *Node) RunClient() error {
 		return fmt.Errorf("endpoint invalide: %w", err)
 	}
 
+	cleanup, err := routing.SetupClient(routing.ClientConfig{
+		TUNName:    n.cfg.TUN.Name,
+		TUNAddr:    n.cfg.TUN.Address,
+		ServerReal: serverAddr.IP.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("routing client: %w", err)
+	}
+	defer cleanup()
+
 	log.Printf("Handshake vers %s (%s)...", peer.Name, peer.Endpoint)
 	sharedKey, err := handshake.ClientHandshake(n.conn, serverAddr, n.kp)
 	if err != nil {
@@ -112,7 +129,6 @@ func (n *Node) RunClient() error {
 	return tunnel.Run(n.tunIface, n.conn, serverAddr, sharedKey)
 }
 
-// keypairFromHex reconstruit une KeyPair depuis la clé privée en hex.
 func keypairFromHex(privHex string) (*handshake.KeyPair, error) {
 	privBytes, err := hex.DecodeString(privHex)
 	if err != nil || len(privBytes) != 32 {

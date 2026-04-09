@@ -35,6 +35,12 @@ func New(cfg *config.Config) (*Node, error) {
 	}
 	log.Printf("TUN prête: %s", tunIface.Name)
 
+	// Configure l'IP et monte l'interface immédiatement
+	if err := routing.AddAddr(tunIface.Name, cfg.TUN.Address); err != nil {
+		tunIface.Close()
+		return nil, fmt.Errorf("configuration TUN: %w", err)
+	}
+
 	udpAddr, err := net.ResolveUDPAddr("udp4", cfg.Listen)
 	if err != nil {
 		tunIface.Close()

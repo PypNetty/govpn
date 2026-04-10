@@ -1,5 +1,5 @@
 # Binaire compilé
-govpn
+/govpn
 
 # Configs avec clés privées — ne JAMAIS committer
 *.yaml

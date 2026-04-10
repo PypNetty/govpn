@@ -8,17 +8,14 @@ import (
 )
 
 type Config struct {
-	// Identité locale
-	PrivateKey string `yaml:"private_key"` // hex 32 bytes
-	// Interface TUN
-	TUN struct {
-		Name    string `yaml:"name"`    // ex: govpn0
-		Address string `yaml:"address"` // ex: 10.0.0.1/24
+	PrivateKey string `yaml:"private_key"`
+	OutIface   string `yaml:"out_iface,omitempty"`
+	TUN        struct {
+		Name    string `yaml:"name"`
+		Address string `yaml:"address"`
 	} `yaml:"tun"`
-	// Réseau
-	Listen string `yaml:"listen"` // ex: 0.0.0.0:51820
-	// Peers connus (mode client : un seul, mode serveur : plusieurs possible)
-	Peers []PeerConfig `yaml:"peers"`
+	Listen string       `yaml:"listen"`
+	Peers  []PeerConfig `yaml:"peers"`
 }
 
 type PeerConfig struct {
